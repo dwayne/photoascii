@@ -8,47 +8,47 @@ require 'RMagick'
 
 include Magick
 
-photo = ImageList.new(ARGV.first)
+class ASCIIPalette
 
-# Step 1
-# Convert pixels to their intensity values
-# Also, figure out the number of rows and columns for the image
-pixels = []
-max_c = -1
-max_r = -1
-photo.each_pixel do |pixel, c, r|
-  pixels << pixel.intensity
-  max_c = [max_c, c].max
-  max_r = [max_r, r].max
-end
-
-# Step 2
-# We need to map the pixel values into the range of printable characters, so
-# determine the smallest and highest intensities we're dealing with
-max = pixels.max
-min = pixels.min
-
-# Step 3
-# We will map:
-#   min -> 32  (space)
-#   max -> 126 (~)
-# And interpolate everything else in-between
-ascii = Array.new(max_r + 1) { Array.new(max_c + 1) }
-photo.each_pixel do |pixel, c, r|
-  if max == min
-    code = 32
-  else
-    code = (94 * pixel.intensity + 32 * max - 126 * min) / (max - min)
+  # The default sequence of ASCII characters were taken from
+  # http://members.optusnet.com.au/astroblue/grey_scale.txt
+  def initialize(ascii = "#@8%0o\";,'. ", bit_depth = 16)
+    @ascii = ascii
+    @max_intensity = (1<<16) - 1
   end
 
-  ascii[r][c] = code.chr
+  def size
+    @ascii.length
+  end
+
+  def to_ascii(value)
+    index = value * (size - 1) / @max_intensity
+    @ascii[index]
+  end
 end
 
-# Step 4
-# Display the darn thing
+palette = ASCIIPalette.new
+
+photo = ImageList.new(ARGV.first)
+
+nrows = photo.rows
+ncols = photo.columns
+
+# Step 1 - Convert to grayscale
+# N.B. This step isn't necessarily needed and
+# could be toggled using a config option
+photo = photo.quantize(256, Magick::GRAYColorspace)
+
+# Step 2 - Convert to ASCII
+ascii = Array.new(nrows) { Array.new(ncols) }
+photo.each_pixel do |pixel, c, r|
+  ascii[r][c] = palette.to_ascii(pixel.intensity)
+end
+
+# Step 3 - Display the darn thing
 puts "<pre style=\"font-family: monospace; font-size: 5px\">"
-(max_r + 1).times do |r|
-  (max_c + 1).times do |c|
+nrows.times do |r|
+  ncols.times do |c|
     print CGI.escapeHTML(ascii[r][c])
   end
   puts
